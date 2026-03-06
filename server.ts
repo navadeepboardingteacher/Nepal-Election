@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import pLimit from "p-limit";
 import NodeCache from "node-cache";
+import * as cheerio from "cheerio";
 
 dotenv.config();
 
@@ -223,6 +224,18 @@ async function startServer() {
     }
   });
 
+  app.get("/api/proxy/provinces", async (req, res) => {
+    try {
+      const response = await fetch("https://election.ratopati.com/api/address/province", {
+        headers: { "User-Agent": "Mozilla/5.0" }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch provinces map data" });
+    }
+  });
+
   app.get("/api/proxy/summary", async (req, res) => {
     try {
       const cachedSummary = cache.get("summary");
@@ -305,6 +318,37 @@ async function startServer() {
     } catch (error) {
       console.error("Summary fetch error:", error);
       res.status(500).json({ error: "Failed to fetch summary" });
+    }
+  });
+
+  app.get("/api/proxy/news", async (req, res) => {
+    try {
+      const cachedNews = cache.get("news");
+      if (cachedNews) {
+        return res.json(cachedNews);
+      }
+
+      const response = await fetch("https://www.ratopati.com/segment/parliament-election-2082", {
+        headers: { "User-Agent": "Mozilla/5.0" }
+      });
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      const news: any[] = [];
+
+      $(".column-news-list .item").each((i, el) => {
+        if (i >= 10) return;
+        const title = $(el).find("h3 a").text().trim();
+        const link = "https://www.ratopati.com" + $(el).find("h3 a").attr("href");
+        const image = $(el).find("img").attr("src");
+        const time = $(el).find(".time").text().trim();
+        news.push({ title, link, image, time });
+      });
+
+      cache.set("news", news, 600); // 10 minutes cache
+      res.json(news);
+    } catch (error) {
+      console.error("News fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch news" });
     }
   });
 

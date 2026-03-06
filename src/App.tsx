@@ -12,7 +12,11 @@ import {
   Image as ImageIcon,
   LayoutDashboard,
   Globe,
-  Award
+  Award,
+  Newspaper,
+  Map as MapIcon,
+  ExternalLink,
+  ChevronDown
 } from "lucide-react";
 import { 
   BarChart, 
@@ -26,18 +30,27 @@ import {
   PieChart,
   Pie
 } from "recharts";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 import { electionApi, Province, District, Candidate, SearchResponse } from "./services/electionApi";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 const App: React.FC = () => {
   const [provinces, setProvinces] = useState<Province[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
+  const [provincesMap, setProvincesMap] = useState<any[]>([]);
+  const [news, setNews] = useState<any[]>([]);
   const [selectedProvince, setSelectedProvince] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
   const [electionData, setElectionData] = useState<SearchResponse | null>(null);
   const [nationalSummary, setNationalSummary] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
+  const [newsLoading, setNewsLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +73,10 @@ const App: React.FC = () => {
             fetchResults(firstDist.disrict_number);
           }
         }
+
+        // Fetch map data
+        const mapData = await electionApi.getProvincesMap();
+        setProvincesMap(mapData);
       } catch (err) {
         setError("Failed to load initial election data. Please check your connection.");
         console.error(err);
@@ -80,8 +97,21 @@ const App: React.FC = () => {
       }
     };
 
+    const fetchNews = async () => {
+      try {
+        setNewsLoading(true);
+        const newsData = await electionApi.getNews();
+        setNews(newsData);
+      } catch (err) {
+        console.error("Failed to fetch news", err);
+      } finally {
+        setNewsLoading(false);
+      }
+    };
+
     init();
     fetchSummary();
+    fetchNews();
   }, []);
 
   const fetchResults = async (districtNum: string) => {
@@ -101,8 +131,7 @@ const App: React.FC = () => {
     return districts.filter(d => d.province_number === selectedProvince);
   }, [districts, selectedProvince]);
 
-  const handleProvinceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const provNum = e.target.value;
+  const handleProvinceChange = (provNum: string) => {
     setSelectedProvince(provNum);
     const firstDist = districts.find(d => d.province_number === provNum);
     if (firstDist) {
@@ -111,13 +140,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDistrictChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const distNum = e.target.value;
+  const handleDistrictChange = (distNum: string) => {
     setSelectedDistrict(distNum);
     fetchResults(distNum);
   };
 
-  // Prepare chart data from national summary
   const chartData = useMemo(() => {
     if (!nationalSummary || nationalSummary.length === 0) return [];
     
@@ -127,176 +154,245 @@ const App: React.FC = () => {
       .slice(0, 8);
   }, [nationalSummary]);
 
+  const currentProvinceMap = useMemo(() => {
+    return provincesMap.find(p => p.id.toString() === selectedProvince);
+  }, [provincesMap, selectedProvince]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-4" />
-          <p className="text-emerald-500 font-mono tracking-widest uppercase">Initializing OSINT Terminal...</p>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            className="w-16 h-16 border-t-2 border-emerald-500 border-r-2 border-emerald-500/30 rounded-full mx-auto mb-6"
+          />
+          <p className="text-emerald-500 font-mono tracking-[0.2em] uppercase text-sm animate-pulse">Initializing OSINT Terminal...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-emerald-500/30">
-      {/* Header */}
-      <header className="border-b border-zinc-800/50 bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-center">
-              <Globe className="w-6 h-6 text-emerald-500" />
+    <div className="min-h-screen bg-[#050505] text-zinc-400 font-sans selection:bg-emerald-500/30">
+      {/* Top Navigation Bar */}
+      <nav className="border-b border-white/5 bg-[#0a0a0a]/80 backdrop-blur-xl sticky top-0 z-50">
+        <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center group hover:bg-emerald-500/20 transition-all duration-500">
+              <Globe className="w-7 h-7 text-emerald-500 group-hover:scale-110 transition-transform duration-500" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">NEPAL ELECTION <span className="text-emerald-500">OSINT</span></h1>
-              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-tighter">Real-time Election Intelligence Terminal</p>
+              <h1 className="text-xl font-black text-white tracking-tighter uppercase italic">
+                Nepal Election <span className="text-emerald-500">OSINT</span>
+              </h1>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Live Intelligence Feed 2082</p>
+              </div>
             </div>
           </div>
           
-          <div className="hidden md:flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 border border-zinc-800 rounded-full text-xs">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              <span className="text-zinc-400">Live Data Stream Active</span>
+          <div className="hidden lg:flex items-center gap-8">
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">System Status</span>
+              <span className="text-xs font-bold text-emerald-500 uppercase tracking-tighter">Operational / Secure</span>
+            </div>
+            <div className="w-px h-8 bg-white/5" />
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">Last Sync</span>
+              <span className="text-xs font-bold text-white uppercase tracking-tighter">{new Date().toLocaleTimeString()}</span>
             </div>
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-zinc-900/30 border border-zinc-800/50 p-6 rounded-2xl">
-            <label className="block text-[10px] font-mono uppercase text-zinc-500 mb-2 tracking-widest">Province Sector</label>
-            <div className="relative">
-              <select 
-                value={selectedProvince}
-                onChange={handleProvinceChange}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 appearance-none focus:outline-none focus:border-emerald-500/50 transition-colors text-white"
-              >
-                {provinces.map(p => (
-                  <option key={p.id} value={p.province_number}>{p.province_en}</option>
-                ))}
-              </select>
-              <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 rotate-90" />
-            </div>
-          </div>
+      <main className="max-w-[1600px] mx-auto px-6 py-10">
+        {/* Dashboard Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          
+          {/* Left Sidebar: Controls & Map */}
+          <div className="lg:col-span-3 space-y-10">
+            <section className="space-y-6">
+              <div className="flex items-center gap-2 mb-4">
+                <MapPin className="w-4 h-4 text-emerald-500" />
+                <h2 className="text-xs font-black text-white uppercase tracking-[0.2em]">Geospatial Filters</h2>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="group">
+                  <label className="block text-[10px] font-mono uppercase text-zinc-600 mb-2 tracking-widest group-hover:text-emerald-500 transition-colors">Province Sector</label>
+                  <div className="relative">
+                    <select 
+                      value={selectedProvince}
+                      onChange={(e) => handleProvinceChange(e.target.value)}
+                      className="w-full bg-zinc-900/50 border border-white/5 rounded-xl px-5 py-4 appearance-none focus:outline-none focus:border-emerald-500/50 transition-all text-white font-bold text-sm hover:bg-zinc-900"
+                    >
+                      {provinces.map(p => (
+                        <option key={p.id} value={p.province_number}>{p.province_en}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" />
+                  </div>
+                </div>
 
-          <div className="bg-zinc-900/30 border border-zinc-800/50 p-6 rounded-2xl">
-            <label className="block text-[10px] font-mono uppercase text-zinc-500 mb-2 tracking-widest">District Node</label>
-            <div className="relative">
-              <select 
-                value={selectedDistrict}
-                onChange={handleDistrictChange}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 appearance-none focus:outline-none focus:border-emerald-500/50 transition-colors text-white"
-              >
-                {filteredDistricts.map(d => (
-                  <option key={d.id} value={d.disrict_number}>{d.disrict_name}</option>
-                ))}
-              </select>
-              <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 rotate-90" />
-            </div>
-          </div>
+                <div className="group">
+                  <label className="block text-[10px] font-mono uppercase text-zinc-600 mb-2 tracking-widest group-hover:text-emerald-500 transition-colors">District Node</label>
+                  <div className="relative">
+                    <select 
+                      value={selectedDistrict}
+                      onChange={(e) => handleDistrictChange(e.target.value)}
+                      className="w-full bg-zinc-900/50 border border-white/5 rounded-xl px-5 py-4 appearance-none focus:outline-none focus:border-emerald-500/50 transition-all text-white font-bold text-sm hover:bg-zinc-900"
+                    >
+                      {filteredDistricts.map(d => (
+                        <option key={d.id} value={d.disrict_number}>{d.disrict_name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+            </section>
 
-          <div className="bg-emerald-500/5 border border-emerald-500/10 p-6 rounded-2xl flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-mono uppercase text-emerald-500/70 mb-1 tracking-widest">Election Status</p>
-              <h3 className="text-xl font-bold text-white uppercase tracking-tight">2082 General</h3>
-            </div>
-            <TrendingUp className="w-8 h-8 text-emerald-500/50" />
-          </div>
-        </div>
-
-        {error && (
-          <div className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400">
-            <AlertCircle className="w-5 h-5" />
-            <p className="text-sm">{error}</p>
-          </div>
-        )}
-
-        {searchLoading ? (
-          <div className="h-[400px] flex items-center justify-center">
-            <div className="text-center">
-              <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mx-auto mb-4" />
-              <p className="text-sm text-zinc-500 font-mono">Decrypting District Data...</p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Left Column: Data Grid */}
-            <div className="lg:col-span-8 space-y-8">
+            <section className="bg-zinc-900/20 border border-white/5 rounded-3xl p-8 space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <LayoutDashboard className="w-5 h-5 text-emerald-500" />
-                  Constituency Intelligence
+                <h3 className="text-xs font-black text-white uppercase tracking-[0.2em]">Province Map</h3>
+                <MapIcon className="w-4 h-4 text-zinc-600" />
+              </div>
+              <div className="aspect-square bg-[#0a0a0a] rounded-2xl border border-white/5 p-4 flex items-center justify-center overflow-hidden group">
+                {currentProvinceMap ? (
+                  <div 
+                    className="w-full h-full transition-transform duration-700 group-hover:scale-110"
+                    dangerouslySetInnerHTML={{ __html: currentProvinceMap.map_code }}
+                  />
+                ) : (
+                  <div className="text-zinc-700 font-mono text-[10px] uppercase">No Map Data</div>
+                )}
+              </div>
+              <p className="text-[10px] text-zinc-600 font-mono leading-relaxed">
+                Interactive geospatial visualization of the selected province sector. Hover over districts for detailed telemetry.
+              </p>
+            </section>
+          </div>
+
+          {/* Center Content: Main Intelligence Feed */}
+          <div className="lg:col-span-6 space-y-10">
+            <section className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                <h2 className="text-2xl font-black text-white tracking-tighter uppercase italic">
+                  District Intelligence <span className="text-zinc-600">/ {electionData?.district_en || "Sector"}</span>
                 </h2>
-                <span className="text-[10px] font-mono text-zinc-500 bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
-                  {Object.keys(electionData?.data || {}).length} SECTORS IDENTIFIED
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">
+                  {Object.keys(electionData?.data || {}).length} Active Areas
                 </span>
               </div>
+            </section>
 
-              <div className="grid grid-cols-1 gap-6">
+            {searchLoading ? (
+              <div className="h-[600px] flex items-center justify-center bg-zinc-900/10 border border-white/5 rounded-3xl border-dashed">
+                <div className="text-center">
+                  <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-6 opacity-50" />
+                  <p className="text-sm text-zinc-600 font-mono tracking-widest uppercase">Decrypting Intelligence Feed...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-8">
                 <AnimatePresence mode="popLayout">
                   {electionData && (Object.entries(electionData.data) as [string, Candidate[]][]).map(([area, candidates], idx) => {
                     const sorted = [...candidates].sort((a, b) => (Number(b.vote) || 0) - (Number(a.vote) || 0));
-                    const winner = sorted[0];
-                    const runnerUp = sorted[1];
                     
                     return (
                       <motion.div 
                         key={area}
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={{ opacity: 0, y: 30 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                        className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl overflow-hidden group hover:border-emerald-500/30 transition-all duration-300"
+                        transition={{ delay: idx * 0.05, type: "spring", stiffness: 100 }}
+                        className="bg-zinc-900/30 border border-white/5 rounded-3xl overflow-hidden hover:border-emerald-500/30 transition-all duration-500 group"
                       >
-                        <div className="p-4 border-b border-zinc-800/50 bg-zinc-900/20 flex items-center justify-between">
-                          <h3 className="text-sm font-bold text-zinc-200">{area}</h3>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                              {sorted.reduce((acc, c) => acc + (Number(c.vote) || 0), 0).toLocaleString()} TOTAL VOTES
-                            </span>
+                        <div className="px-8 py-5 border-b border-white/5 bg-zinc-900/20 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                            <h3 className="text-sm font-black text-white uppercase tracking-widest">{area}</h3>
                           </div>
+                          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+                            {sorted.reduce((acc, c) => acc + (Number(c.vote) || 0), 0).toLocaleString()} Total Votes
+                          </span>
                         </div>
                         
-                        <div className="p-6 flex flex-col gap-4">
+                        <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
                           {sorted.length > 0 ? (
                             sorted.slice(0, 2).map((candidate, i) => (
-                              <div key={candidate.id} className={`relative flex items-center gap-4 p-3 rounded-xl border transition-colors ${i === 0 ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-zinc-800/50 bg-zinc-900/30 hover:border-zinc-700'}`}>
-                                {i === 0 && <div className="absolute -top-2 -left-2 px-2 py-0.5 bg-emerald-500 text-[10px] font-bold text-black rounded uppercase tracking-tighter z-10">Leading</div>}
-                                {i === 1 && <div className="absolute -top-2 -left-2 px-2 py-0.5 bg-zinc-700 text-[10px] font-bold text-white rounded uppercase tracking-tighter z-10">Runner Up</div>}
-                                <div className="relative shrink-0">
-                                  <img 
-                                    src={candidate.candidate_picture} 
-                                    alt={candidate.name_en}
-                                    className={`w-14 h-14 rounded-xl object-cover ${i === 0 ? 'border-2 border-emerald-500/50 shadow-lg shadow-emerald-500/10' : 'border border-zinc-700'}`}
-                                    referrerPolicy="no-referrer"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${candidate.id}/200/200`;
-                                    }}
-                                  />
-                                  <img 
-                                    src={candidate.party_logo} 
-                                    className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border border-zinc-900 bg-white p-0.5"
-                                    referrerPolicy="no-referrer"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).style.display = 'none';
-                                    }}
-                                  />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <h4 className={`font-bold ${i === 0 ? 'text-white' : 'text-zinc-300'} text-sm leading-tight truncate`}>{candidate.name_en}</h4>
-                                  <p className="text-[10px] text-zinc-500 truncate">{candidate.party}</p>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <span className={`text-lg font-mono font-bold ${i === 0 ? 'text-emerald-500' : 'text-zinc-400'}`}>{(Number(candidate.vote) || 0).toLocaleString()}</span>
+                              <div 
+                                key={candidate.id} 
+                                className={cn(
+                                  "relative flex flex-col gap-5 p-6 rounded-2xl border transition-all duration-500",
+                                  i === 0 
+                                    ? "border-emerald-500/30 bg-emerald-500/[0.03] shadow-[0_0_30px_rgba(16,185,129,0.05)]" 
+                                    : "border-white/5 bg-zinc-900/40 hover:border-zinc-700"
+                                )}
+                              >
+                                {i === 0 && (
+                                  <div className="absolute -top-3 left-6 px-3 py-1 bg-emerald-500 text-[10px] font-black text-black rounded-full uppercase tracking-widest shadow-lg shadow-emerald-500/20">
+                                    Leading
                                   </div>
-                                  <span className="text-[9px] text-zinc-600 font-mono block">VOTES</span>
+                                )}
+                                
+                                <div className="flex items-center gap-5">
+                                  <div className="relative shrink-0">
+                                    <img 
+                                      src={candidate.candidate_picture} 
+                                      alt={candidate.name_en}
+                                      className={cn(
+                                        "w-20 h-20 rounded-2xl object-cover grayscale group-hover:grayscale-0 transition-all duration-700",
+                                        i === 0 ? "border-2 border-emerald-500/50" : "border border-white/10"
+                                      )}
+                                      referrerPolicy="no-referrer"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${candidate.id}/200/200`;
+                                      }}
+                                    />
+                                    <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-xl border-2 border-[#0a0a0a] bg-white p-1 shadow-xl">
+                                      <img 
+                                        src={candidate.party_logo} 
+                                        className="w-full h-full object-contain"
+                                        referrerPolicy="no-referrer"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className={cn(
+                                      "font-black tracking-tight text-lg leading-tight truncate",
+                                      i === 0 ? "text-white" : "text-zinc-300"
+                                    )}>{candidate.name_en}</h4>
+                                    <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest mt-1 truncate">{candidate.party}</p>
+                                  </div>
+                                </div>
+
+                                <div className="mt-auto pt-5 border-t border-white/5 flex items-end justify-between">
+                                  <div>
+                                    <span className="text-[9px] text-zinc-600 font-mono uppercase tracking-widest block mb-1">Vote Count</span>
+                                    <span className={cn(
+                                      "text-2xl font-black font-mono tracking-tighter",
+                                      i === 0 ? "text-emerald-500" : "text-zinc-400"
+                                    )}>{(Number(candidate.vote) || 0).toLocaleString()}</span>
+                                  </div>
+                                  <div className="h-10 w-10 rounded-full border border-white/5 flex items-center justify-center group/btn hover:bg-white/5 transition-colors cursor-pointer">
+                                    <ExternalLink className="w-4 h-4 text-zinc-600 group-hover/btn:text-white transition-colors" />
+                                  </div>
                                 </div>
                               </div>
                             ))
                           ) : (
-                            <div className="flex items-center justify-center h-16 text-zinc-600 text-xs font-mono uppercase">No Data Available</div>
+                            <div className="col-span-2 flex flex-col items-center justify-center h-40 text-zinc-700 border border-white/5 border-dashed rounded-2xl">
+                              <Info className="w-8 h-8 mb-3 opacity-20" />
+                              <span className="text-[10px] font-mono uppercase tracking-[0.2em]">No Intelligence Data Available</span>
+                            </div>
                           )}
                         </div>
                       </motion.div>
@@ -304,115 +400,181 @@ const App: React.FC = () => {
                   })}
                 </AnimatePresence>
               </div>
-            </div>
-
-            {/* Right Column: Analytics & AI */}
-            <div className="lg:col-span-4 space-y-8">
-              {/* Party Distribution Chart */}
-              <div className="bg-zinc-900/30 border border-zinc-800/50 p-6 rounded-2xl">
-                <h3 className="text-sm font-bold text-white mb-6 flex items-center gap-2 uppercase tracking-widest">
-                  <BarChart3 className="w-4 h-4 text-emerald-500" />
-                  Party Distribution
-                </h3>
-                <div className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-                      <XAxis type="number" hide />
-                      <YAxis 
-                        dataKey="name" 
-                        type="category" 
-                        width={100} 
-                        tick={{ fill: '#71717a', fontSize: 10 }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <Tooltip 
-                        cursor={{ fill: '#18181b' }}
-                        contentStyle={{ 
-                          backgroundColor: '#09090b', 
-                          border: '1px solid #27272a',
-                          borderRadius: '8px',
-                          fontSize: '12px'
-                        }}
-                      />
-                      <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]}>
-                        {chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#3f3f46'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Party Overview */}
-              <div className="bg-zinc-900/30 border border-zinc-800/50 p-6 rounded-2xl">
-                <h3 className="text-sm font-bold text-white mb-6 flex items-center gap-2 uppercase tracking-widest">
-                  <Award className="w-4 h-4 text-emerald-500" />
-                  National Party Overview
-                </h3>
-                
-                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                  {summaryLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
-                    </div>
-                  ) : nationalSummary.length > 0 ? (
-                    nationalSummary.map((stat, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-zinc-900/50 border border-zinc-800/50 rounded-xl hover:border-emerald-500/20 transition-colors">
-                        <div className="flex-1 min-w-0 pr-4">
-                          <h4 className="text-sm font-bold text-zinc-200 truncate">{stat.party}</h4>
-                          <p className="text-[10px] font-mono text-zinc-500 uppercase">{stat.total_votes.toLocaleString()} Total Votes</p>
-                        </div>
-                        <div className="flex items-center gap-4 shrink-0">
-                          <div className="text-center min-w-[40px]">
-                            <span className="block text-lg font-mono font-bold text-emerald-500">{stat.leads}</span>
-                            <span className="block text-[9px] font-mono text-zinc-600 uppercase">Lead</span>
-                          </div>
-                          <div className="text-center min-w-[40px]">
-                            <span className="block text-lg font-mono font-bold text-white">{stat.wins}</span>
-                            <span className="block text-[9px] font-mono text-zinc-600 uppercase">Win</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 text-zinc-600 text-xs font-mono uppercase">
-                      No National Data Available
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-                  <p className="text-[10px] font-mono text-zinc-500 uppercase mb-1">Total Sectors</p>
-                  <p className="text-xl font-bold text-white">{Object.keys(electionData?.data || {}).length}</p>
-                </div>
-                <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-                  <p className="text-[10px] font-mono text-zinc-500 uppercase mb-1">Leading Party</p>
-                  <p className="text-xl font-bold text-emerald-500 truncate">
-                    {chartData[0]?.name || "N/A"}
-                  </p>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
-        )}
+
+          {/* Right Sidebar: Analytics & News */}
+          <div className="lg:col-span-3 space-y-10">
+            {/* National Summary */}
+            <section className="bg-zinc-900/20 border border-white/5 rounded-3xl p-8 space-y-8">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black text-white uppercase tracking-[0.2em]">National Overview</h3>
+                <TrendingUp className="w-4 h-4 text-emerald-500" />
+              </div>
+              
+              <div className="h-[200px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} layout="vertical" margin={{ left: -20 }}>
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      width={80} 
+                      tick={{ fill: '#52525b', fontSize: 9, fontWeight: 700 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                      contentStyle={{ 
+                        backgroundColor: '#0a0a0a', 
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: '12px',
+                        fontSize: '10px',
+                        fontWeight: 'bold'
+                      }}
+                    />
+                    <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={12}>
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#27272a'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                {summaryLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="w-6 h-6 text-emerald-500 animate-spin opacity-30" />
+                  </div>
+                ) : nationalSummary.map((stat, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-4 bg-zinc-900/40 border border-white/5 rounded-2xl hover:border-emerald-500/20 transition-all duration-300 group">
+                    <div className="flex-1 min-w-0 pr-4">
+                      <h4 className="text-xs font-black text-zinc-300 truncate group-hover:text-white transition-colors">{stat.party}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="w-1.5 h-1.5 bg-zinc-700 rounded-full" />
+                        <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-tighter">{stat.total_votes.toLocaleString()} Votes</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-center min-w-[32px]">
+                        <span className="block text-sm font-black font-mono text-emerald-500">{stat.leads}</span>
+                        <span className="block text-[8px] font-mono text-zinc-700 uppercase">L</span>
+                      </div>
+                      <div className="text-center min-w-[32px]">
+                        <span className="block text-sm font-black font-mono text-white">{stat.wins}</span>
+                        <span className="block text-[8px] font-mono text-zinc-700 uppercase">W</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* News Feed */}
+            <section className="space-y-6">
+              <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-2">
+                  <Newspaper className="w-4 h-4 text-emerald-500" />
+                  <h3 className="text-xs font-black text-white uppercase tracking-[0.2em]">Intelligence Feed</h3>
+                </div>
+                <span className="text-[9px] font-mono text-zinc-600 uppercase">Ratopati News</span>
+              </div>
+
+              <div className="space-y-4">
+                {newsLoading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-24 bg-zinc-900/30 border border-white/5 rounded-2xl animate-pulse" />
+                  ))
+                ) : news.map((item, i) => (
+                  <motion.a
+                    key={i}
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className="flex gap-4 p-4 bg-zinc-900/20 border border-white/5 rounded-2xl hover:border-emerald-500/30 hover:bg-zinc-900/40 transition-all duration-500 group"
+                  >
+                    <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden border border-white/5">
+                      <img 
+                        src={item.image} 
+                        alt="" 
+                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-110"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-bold text-zinc-300 leading-snug line-clamp-2 group-hover:text-white transition-colors">
+                        {item.title}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-[9px] font-mono text-zinc-600 uppercase">{item.time}</span>
+                      </div>
+                    </div>
+                  </motion.a>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-zinc-800/50 mt-12 py-8 bg-zinc-900/20">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Election Data Source: Election Commission of Nepal (via PSBNepal)</span>
+      {/* Footer Terminal */}
+      <footer className="border-t border-white/5 mt-20 py-12 bg-[#0a0a0a]">
+        <div className="max-w-[1600px] mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-[0.2em]">Data Source: PSBNepal / Ratopati</span>
+            </div>
+            <div className="w-px h-4 bg-white/10" />
+            <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">Nepal Election OSINT v2.82.0-STABLE</p>
           </div>
-          <p className="text-[10px] font-mono text-zinc-600 uppercase">Terminal Version 2.0.82-BETA</p>
+          
+          <div className="flex items-center gap-8">
+            <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest cursor-help hover:text-white transition-colors">Privacy Protocol</span>
+            <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest cursor-help hover:text-white transition-colors">API Documentation</span>
+            <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-mono text-white uppercase tracking-widest">
+              Secure Terminal Connection
+            </div>
+          </div>
         </div>
       </footer>
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(16, 185, 129, 0.2);
+        }
+        
+        /* Map SVG Styling */
+        svg path {
+          transition: all 0.3s ease;
+          cursor: pointer;
+        }
+        svg path:hover {
+          fill: rgba(16, 185, 129, 0.4) !important;
+          stroke: #10b981 !important;
+          stroke-width: 1px !important;
+        }
+        svg text {
+          pointer-events: none;
+          fill: #71717a !important;
+          font-family: inherit;
+        }
+      `}</style>
     </div>
   );
 };

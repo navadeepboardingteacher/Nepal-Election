@@ -70,6 +70,12 @@ export const electionApi = {
     return data.data;
   },
 
+  async getProvincesMap() {
+    const response = await fetch(`${BASE_URL}/provinces`);
+    const data = await response.json();
+    return data.data;
+  },
+
   async searchResults(electionType: number, districtNumber: string): Promise<SearchResponse> {
     const response = await fetch(`${BASE_URL}/search`, {
       method: 'POST',
@@ -86,6 +92,11 @@ export const electionApi = {
 
   async getSummary() {
     const response = await fetch(`${BASE_URL}/summary`);
+    return await response.json();
+  },
+
+  async getNews() {
+    const response = await fetch(`${BASE_URL}/news`);
     return await response.json();
   }
 };
