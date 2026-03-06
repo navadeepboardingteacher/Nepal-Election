@@ -1,5 +1,5 @@
 {
-  "name": "Nepal Election OSINT 2082",
+  "name": "Nepal Election OSINT",
   "description": "A modern OSINT tool for tracking and analyzing the Nepal 2082 election results across all 7 provinces and 77 districts.",
   "requestFramePermissions": []
 }
